@@ -1,3 +1,5 @@
 #!/bin/bash
 
-python -u fastloop_trader.py --live --smart-sizing --quiet
+python fastloop_trader.py --live
+
+python fastloop_trader.py --live --quiet
