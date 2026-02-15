@@ -284,48 +284,37 @@ def find_best_fast_market(markets):
 # CEX Price Signal
 # =============================================================================
 
-def get_binance_momentum(symbol="BTCUSDT", lookback_minutes=5):
-    """Get price momentum from Binance public API.
-    Returns: {momentum_pct, direction, price_now, price_then, avg_volume, candles}
-    """
-    url = (
-        f"https://api.binance.com/api/v3/klines"
-        f"?symbol={symbol}&interval=1m&limit={lookback_minutes}"
-    )
-    result = _api_request(url)
-    if not result or isinstance(result, dict):
-        return None
+import time
 
-    try:
-        # Kline format: [open_time, open, high, low, close, volume, ...]
-        candles = result
-        if len(candles) < 2:
-            return None
+def get_binance_momentum(symbol="BTCUSDT", lookback_minutes=5, retries=3):
+    url = f"https://api1.binance.com/api/v3/klines?symbol={symbol}&interval=1m&limit={lookback_minutes}"
 
-        price_then = float(candles[0][1])   # open of oldest candle
-        price_now = float(candles[-1][4])    # close of newest candle
-        momentum_pct = ((price_now - price_then) / price_then) * 100
-        direction = "up" if momentum_pct > 0 else "down"
+    for attempt in range(retries):
+        data = _api_request(url)
+        if data and not isinstance(data, dict) or "error" not in data:
+            try:
+                price_then = float(data[0][4])
+                price_now = float(data[-1][4])
+                volumes = [float(c[5]) for c in data]
+                avg_volume = sum(volumes) / len(volumes)
+                momentum_pct = (price_now - price_then) / price_then * 100
+                direction = "up" if momentum_pct > 0 else "down" if momentum_pct < 0 else "neutral"
+                return {
+                    "momentum_pct": momentum_pct,
+                    "direction": direction,
+                    "price_now": price_now,
+                    "price_then": price_then,
+                    "avg_volume": avg_volume,
+                    "latest_volume": volumes[-1],
+                    "volume_ratio": volumes[-1] / avg_volume if avg_volume > 0 else 1.0,
+                }
+            except Exception as e:
+                print(f"Binance parse error: {e}", flush=True)
+        else:
+            print(f"Binance attempt {attempt+1} failed, retrying...", flush=True)
+            time.sleep(2)
+    return None
 
-        volumes = [float(c[5]) for c in candles]
-        avg_volume = sum(volumes) / len(volumes)
-        latest_volume = volumes[-1]
-
-        # Volume ratio: latest vs average (>1 = above average activity)
-        volume_ratio = latest_volume / avg_volume if avg_volume > 0 else 1.0
-
-        return {
-            "momentum_pct": momentum_pct,
-            "direction": direction,
-            "price_now": price_now,
-            "price_then": price_then,
-            "avg_volume": avg_volume,
-            "latest_volume": latest_volume,
-            "volume_ratio": volume_ratio,
-            "candles": len(candles),
-        }
-    except (IndexError, ValueError, KeyError):
-        return None
 
 
 def get_coingecko_momentum(asset="bitcoin", lookback_minutes=5):
