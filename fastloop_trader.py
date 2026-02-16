@@ -20,6 +20,12 @@ import sys
 import json
 import math
 import argparse
+import os
+import sys
+import json
+import math
+import argparse
+import time
 from datetime import datetime, timezone, timedelta
 from urllib.request import urlopen, Request
 from urllib.error import HTTPError, URLError
@@ -284,39 +290,6 @@ def find_best_fast_market(markets):
 # CEX Price Signal
 # =============================================================================
 
-import time
-
-def get_binance_momentum(symbol="BTCUSDT", lookback_minutes=5, retries=3):
-    url = f"https://api1.binance.com/api/v3/klines?symbol={symbol}&interval=1m&limit={lookback_minutes}"
-
-    for attempt in range(retries):
-        data = _api_request(url)
-        if data and not isinstance(data, dict) or "error" not in data:
-            try:
-                price_then = float(data[0][4])
-                price_now = float(data[-1][4])
-                volumes = [float(c[5]) for c in data]
-                avg_volume = sum(volumes) / len(volumes)
-                momentum_pct = (price_now - price_then) / price_then * 100
-                direction = "up" if momentum_pct > 0 else "down" if momentum_pct < 0 else "neutral"
-                return {
-                    "momentum_pct": momentum_pct,
-                    "direction": direction,
-                    "price_now": price_now,
-                    "price_then": price_then,
-                    "avg_volume": avg_volume,
-                    "latest_volume": volumes[-1],
-                    "volume_ratio": volumes[-1] / avg_volume if avg_volume > 0 else 1.0,
-                }
-            except Exception as e:
-                print(f"Binance parse error: {e}", flush=True)
-        else:
-            print(f"Binance attempt {attempt+1} failed, retrying...", flush=True)
-            time.sleep(2)
-    return None
-
-
-
 def get_coingecko_momentum(asset="bitcoin", lookback_minutes=5):
     """Fallback: get price from CoinGecko (less accurate, ~1-2 min lag)."""
     url = f"https://api.coingecko.com/api/v3/simple/price?ids={asset}&vs_currencies=usd"
@@ -353,6 +326,65 @@ def get_momentum(asset="BTC", source="binance", lookback=5):
         return get_coingecko_momentum(cg_id, lookback)
     else:
         return None
+
+
+
+
+
+
+def get_binance_momentum(symbol="BTCUSDT", lookback_minutes=5, retries=3):
+    url = f"https://api.binance.us/api/v3/klines"
+    full_url = f"{url}?symbol={symbol}&interval=1m&limit={lookback_minutes}"
+
+    for attempt in range(retries):
+        print(f"[Binance] Attempt {attempt+1} → {full_url}", flush=True)
+
+        data = _api_request(full_url)
+
+        print(f"[Binance] Raw response: {data}", flush=True)
+
+        if not data:
+            print("[Binance] No response", flush=True)
+            time.sleep(2)
+            continue
+
+        if isinstance(data, dict) and data.get("error"):
+            print(f"[Binance] API error: {data}", flush=True)
+            time.sleep(2)
+            continue
+
+        try:
+            price_then = float(data[0][4])
+            price_now = float(data[-1][4])
+            volumes = [float(c[5]) for c in data]
+
+            avg_volume = sum(volumes) / len(volumes)
+            momentum_pct = (price_now - price_then) / price_then * 100
+            direction = "up" if momentum_pct > 0 else "down" if momentum_pct < 0 else "neutral"
+
+            print("[Binance] Successfully parsed candles", flush=True)
+
+            return {
+                "momentum_pct": momentum_pct,
+                "direction": direction,
+                "price_now": price_now,
+                "price_then": price_then,
+                "avg_volume": avg_volume,
+                "latest_volume": volumes[-1],
+                "volume_ratio": volumes[-1] / avg_volume if avg_volume > 0 else 1.0,
+            }
+
+        except Exception as e:
+            print(f"[Binance] Parse error: {e}", flush=True)
+            time.sleep(2)
+
+    print("[Binance] All retries failed", flush=True)
+    return None
+
+
+
+
+
 
 
 # =============================================================================
