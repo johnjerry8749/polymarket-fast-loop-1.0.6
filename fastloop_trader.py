@@ -333,7 +333,7 @@ def get_momentum(asset="BTC", source="binance", lookback=5):
 
 
 def get_binance_momentum(symbol="BTCUSDT", lookback_minutes=5, retries=3):
-    url = f"https://api.binance.us/api/v3/klines"
+    url = f"https://api.binance.com/api/v3/klines"
     full_url = f"{url}?symbol={symbol}&interval=1m&limit={lookback_minutes}"
 
     for attempt in range(retries):
